@@ -4,7 +4,7 @@ require 'bundler/setup'
 require 'rest-client'
 require 'yajl'
 
-VERSION = '0.0.1'
+VERSION = '0.0.2'
 
 STDOUT.sync = true
 
@@ -155,11 +155,23 @@ end
 printf "#{' ' * 80}\r    %u/%u done in %s.\n",
 	done, total, tm_len(Time.now - t)
 
-scount = retried_request :get, "#{surl}/#{sidx}/_count?q=*"
-dcount = retried_request :get, "#{durl}/#{didx}/_count?q=*"
-scount = Yajl::Parser.parse(scount)['count'].to_i
-dcount = Yajl::Parser.parse(dcount)['count'].to_i
-printf "Comparing document count: %u == %u (%s\n",
+# no point for large reindexation with data still being stored in index
+printf "Checking document count... "
+scount, dcount = 1, 0
+begin
+	status = Timeout::timeout(60){
+		while true
+			scount = retried_request :get, "#{surl}/#{sidx}/_count?q=*"
+			dcount = retried_request :get, "#{durl}/#{didx}/_count?q=*"
+			scount = Yajl::Parser.parse(scount)['count'].to_i
+			dcount = Yajl::Parser.parse(dcount)['count'].to_i
+			break if scount == dcount
+			sleep 1
+		end
+	}
+rescue Timeout::Error
+end
+printf "%u == %u (%s\n",
 	scount, dcount, scount == dcount ? 'equals).' : 'NOT EQUAL)!'
 
 exit 0
