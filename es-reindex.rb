@@ -2,9 +2,9 @@
 #encoding:utf-8
 require 'bundler/setup'
 require 'rest-client'
-require 'yajl'
+require 'oj'
 
-VERSION = '0.0.2'
+VERSION = '0.0.3'
 
 STDOUT.sync = true
 
@@ -25,6 +25,8 @@ Usage:
 		exit 1
 	end
 end
+
+Oj.default_options = {:mode => :compat}
 
 remove, frame, src, dst = false, 1000, nil, nil
 
@@ -89,12 +91,12 @@ unless retried_request(:get, "#{durl}/#{didx}/_status")
 		warn "Failed to obtain original index '#{surl}/#{sidx}' settings!"
 		exit 1
 	end
-	settings = Yajl::Parser.parse settings
+	settings = Oj.load settings
 	sidx = settings.keys[0]
+	settings[sidx].delete 'index.version.created'
 	printf 'Creating \'%s/%s\' index with settings from \'%s/%s\'... ',
 			durl, didx, surl, sidx
-	unless retried_request(
-			:post, "#{durl}/#{didx}", Yajl::Encoder.encode(settings[sidx]))
+	unless retried_request(:post, "#{durl}/#{didx}", Oj.dump(settings[sidx]))
 		puts 'FAILED!'
 		exit 1
 	else
@@ -104,11 +106,11 @@ unless retried_request(:get, "#{durl}/#{didx}/_status")
 		warn "Failed to obtain original index '#{surl}/#{sidx}' mappings!"
 		exit 1
 	end
-	mappings = Yajl::Parser.parse mappings
+	mappings = Oj.load mappings
 	mappings[sidx].each_pair{|type, mapping|
 		printf 'Copying mapping \'%s/%s/%s\'... ', durl, didx, type
 		unless retried_request(:put, "#{durl}/#{didx}/#{type}/_mapping",
-				Yajl::Encoder.encode({type => mapping}))
+				Oj.dump({type => mapping}))
 			puts 'FAILED!'
 			exit 1
 		else
@@ -121,10 +123,10 @@ end
 printf "Copying '%s/%s' to '%s/%s'... \n", surl, sidx, durl, didx
 t, done = Time.now, 0
 shards = retried_request :get, "#{surl}/#{sidx}/_count?q=*"
-shards = Yajl::Parser.parse(shards)['_shards']['total'].to_i
+shards = Oj.load(shards)['_shards']['total'].to_i
 scan = retried_request(:get, "#{surl}/#{sidx}/_search" +
 		"?search_type=scan&scroll=10m&size=#{frame / shards}")
-scan = Yajl::Parser.parse scan
+scan = Oj.load scan
 scroll_id = scan['_scroll_id']
 total = scan['hits']['total']
 printf "    %u/%u (%.1f%%) done.\r", done, total, 0
@@ -132,14 +134,16 @@ printf "    %u/%u (%.1f%%) done.\r", done, total, 0
 while true do
 	data = retried_request(:get,
 			"#{surl}/_search/scroll?scroll=10m&scroll_id=#{scroll_id}")
-	data = Yajl::Parser.parse data
+	data = Oj.load data
 	break if data['hits']['hits'].empty?
 	scroll_id = data['_scroll_id']
 	bulk = ''
 	data['hits']['hits'].each{|doc|
+		### === implement possible modifications to the document
+		### === end modifications to the document
 		bulk += %Q({"index" : {"_index" : "#{didx}", "_id" : "#{
 				doc['_id']}", "_type" : "#{doc['_type']}"}}\n)
-		bulk += Yajl::Encoder.encode(doc['_source']) + "\n"
+		bulk += Oj.dump(doc['_source']) + "\n"
 		done += 1
 	}
 	unless bulk.empty?
@@ -163,8 +167,8 @@ begin
 		while true
 			scount = retried_request :get, "#{surl}/#{sidx}/_count?q=*"
 			dcount = retried_request :get, "#{durl}/#{didx}/_count?q=*"
-			scount = Yajl::Parser.parse(scount)['count'].to_i
-			dcount = Yajl::Parser.parse(dcount)['count'].to_i
+			scount = Oj.load(scount)['count'].to_i
+			dcount = Oj.load(dcount)['count'].to_i
 			break if scount == dcount
 			sleep 1
 		end

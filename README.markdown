@@ -10,7 +10,7 @@ Progress and time estimation is displayed during the scrolling process.
 Following gems are required via `Gemfile`:
 
 + [rest-client] (https://github.com/archiloque/rest-client)
-+ [yajl-ruby] (https://github.com/brianmario/yajl-ruby)
++ [oj] (https://github.com/ohler55/oj)
 
 You can install the requirements locally via `bundler`:
 
@@ -36,6 +36,8 @@ Refer to script's help:
 
 ## Changelog
 
++ __0.0.3__: Yajl -> Oj
++ __0.0.2__: repated document count comparison
 + __0.0.1__: first revision
 
 ## License
