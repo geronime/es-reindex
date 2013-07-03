@@ -4,13 +4,12 @@ require 'bundler/setup'
 require 'rest-client'
 require 'oj'
 
-VERSION = '0.0.3'
+VERSION = '0.0.4'
 
 STDOUT.sync = true
 
-if ARGV[0]
-	if ARGV[0] =~ /^-(?:h|-?help)$/
-		puts "
+if ARGV.size == 0 or ARGV[0] =~ /^-(?:h|-?help)$/
+	puts "
 Script to copy particular ES index including its (re)creation w/options set
 and mapping copied.
 
@@ -20,20 +19,21 @@ Usage:
 
     - -r - remove the index in the new location first
     - -f - specify frame size to be obtained with one fetch during scrolling
+    - -u - update existing documents (default: only create non-existing)
     - optional source/destination urls default to http://127.0.0.1:9200
 \n"
-		exit 1
-	end
+	exit 1
 end
 
 Oj.default_options = {:mode => :compat}
 
-remove, frame, src, dst = false, 1000, nil, nil
+remove, update, frame, src, dst = false, false, 1000, nil, nil
 
 while ARGV[0]
 	case arg = ARGV.shift
 	when '-r' then remove = true
 	when '-f' then frame = ARGV.shift.to_i
+        when '-u' then update = true
 	else
 		!src ? (src = arg) : !dst ? (dst = arg) :
 			raise("Unexpected parameter '#{arg}'. Use '-h' for help.")
@@ -51,7 +51,9 @@ surl, durl, sidx, didx = '', '', '', ''
 	end
 }
 printf "Copying '%s/%s' to '%s/%s'%s\n  Confirm or hit Ctrl-c to abort...\n",
-	surl, sidx, durl, didx, remove ? ' rewriting destination!' : '.'
+	surl, sidx, durl, didx,
+	remove ? ' with rewriting destination mapping!' : (update ? ' with updating existing documents!' : '.')
+
 $stdin.readline
 
 def tm_len l
@@ -131,6 +133,8 @@ scroll_id = scan['_scroll_id']
 total = scan['hits']['total']
 printf "    %u/%u (%.1f%%) done.\r", done, total, 0
 
+bulk_op = update ? "index" : "create"
+
 while true do
 	data = retried_request(:get,
 			"#{surl}/_search/scroll?scroll=10m&scroll_id=#{scroll_id}")
@@ -141,7 +145,7 @@ while true do
 	data['hits']['hits'].each{|doc|
 		### === implement possible modifications to the document
 		### === end modifications to the document
-		bulk += %Q({"index" : {"_index" : "#{didx}", "_id" : "#{
+		bulk += %Q({"#{bulk_op}": {"_index" : "#{didx}", "_id" : "#{
 				doc['_id']}", "_type" : "#{doc['_type']}"}}\n)
 		bulk += Oj.dump(doc['_source']) + "\n"
 		done += 1
