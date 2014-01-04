@@ -35,7 +35,8 @@ while ARGV[0]
 	when '-f' then frame = ARGV.shift.to_i
         when '-u' then update = true
 	else
-		!src ? (src = arg) : !dst ? (dst = arg) :
+		url = arg.chomp("/")
+		!src ? (src = url) : !dst ? (dst = url) :
 			raise("Unexpected parameter '#{arg}'. Use '-h' for help.")
 	end
 end
