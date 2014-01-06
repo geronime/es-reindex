@@ -39,6 +39,7 @@ Refer to script's help:
 
 ## Changelog
 
++ __0.0.5__: Merge fix for trailing slash in urls (@ichinco), formatting cleanup
 + __0.0.4__: Force create only, update is optional (@pgaertig)
 + __0.0.3__: Yajl -> Oj
 + __0.0.2__: repated document count comparison
