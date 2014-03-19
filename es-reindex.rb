@@ -4,7 +4,7 @@ require 'bundler/setup'
 require 'rest-client'
 require 'oj'
 
-VERSION = '0.0.6'
+VERSION = '0.0.7'
 
 STDOUT.sync = true
 
@@ -148,9 +148,11 @@ while true do
   data['hits']['hits'].each do |doc|
     ### === implement possible modifications to the document
     ### === end modifications to the document
-    bulk += Oj.dump({bulk_op => {
-        '_index' => didx, '_id' => doc['_id'], '_type' => doc['_type']}}) + "\n"
-    bulk += Oj.dump(doc['_source']) + "\n"
+    base = {'_index' => didx, '_id' => doc['_id'], '_type' => doc['_type']}
+    ['_timestamp', '_ttl'].each{|doc_arg|
+      base[doc_arg] = doc[doc_arg] if doc.key? doc_arg
+    }
+    bulk += Oj.dump({bulk_op => base}) + "\n" + Oj.dump(doc['_source']) + "\n"
     done += 1
   end
   unless bulk.empty?
