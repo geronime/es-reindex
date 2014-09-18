@@ -152,11 +152,12 @@ while true do
     ['_timestamp', '_ttl'].each{|doc_arg|
       base[doc_arg] = doc[doc_arg] if doc.key? doc_arg
     }
-    bulk += Oj.dump({bulk_op => base}) + "\n" + Oj.dump(doc['_source']) + "\n"
+    bulk << Oj.dump({bulk_op => base}) + "\n" 
+	bulk << Oj.dump(doc['_source']) + "\n"
     done += 1
   end
   unless bulk.empty?
-    bulk += "\n" # empty line in the end required
+    bulk << "\n" # empty line in the end required
     retried_request :post, "#{durl}/_bulk", bulk
   end
 
