@@ -4,7 +4,7 @@ require 'bundler/setup'
 require 'rest-client'
 require 'oj'
 
-VERSION = '0.0.7'
+VERSION = '0.0.8'
 
 STDOUT.sync = true
 
@@ -67,7 +67,7 @@ def tm_len l
   t.push l
   out = sprintf '%u', t.shift
   out = out == '0' ? '' : out + ' days, '
-  out += sprintf('%u:%02u:%02u', *t)
+  out << sprintf('%u:%02u:%02u', *t)
   out
 end
 
@@ -81,6 +81,7 @@ def retried_request method, url, data=nil
       return nil
     rescue => e
       warn "\nRetrying #{method.to_s.upcase} ERROR: #{e.class} - #{e.message}"
+      warn e.response
     end
   end
 end
@@ -122,7 +123,6 @@ unless retried_request(:get, "#{durl}/#{didx}/_status")
       puts 'OK.'
     end
   }
-  
 end
 
 printf "Copying '%s/%s' to '%s/%s'... \n", surl, sidx, durl, didx
@@ -136,7 +136,7 @@ scroll_id = scan['_scroll_id']
 total = scan['hits']['total']
 printf "    %u/%u (%.1f%%) done.\r", done, total, 0
 
-bulk_op = update ? "index" : "create"
+bulk_op = update ? 'index' : 'create'
 
 while true do
   data = retried_request(:get,
@@ -152,8 +152,8 @@ while true do
     ['_timestamp', '_ttl'].each{|doc_arg|
       base[doc_arg] = doc[doc_arg] if doc.key? doc_arg
     }
-    bulk << Oj.dump({bulk_op => base}) + "\n" 
-	bulk << Oj.dump(doc['_source']) + "\n"
+    bulk << Oj.dump({bulk_op => base}) + "\n"
+    bulk << Oj.dump(doc['_source']) + "\n"
     done += 1
   end
   unless bulk.empty?
@@ -173,7 +173,7 @@ printf "#{' ' * 80}\r    %u/%u done in %s.\n",
 printf 'Checking document count... '
 scount, dcount = 1, 0
 begin
-  status = Timeout::timeout(60) do
+  Timeout::timeout(60) do
     while true
       scount = retried_request :get, "#{surl}/#{sidx}/_count?q=*"
       dcount = retried_request :get, "#{durl}/#{didx}/_count?q=*"

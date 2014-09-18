@@ -39,6 +39,7 @@ Refer to script's help:
 
 ## Changelog
 
++ __0.0.8__: Optimization in string concat (@nara)
 + __0.0.7__: Document header arguments `_timestamp` and `_ttl` are copied as well
 + __0.0.6__: Document headers in bulks are now assembled and properly JSON dumped
 + __0.0.5__: Merge fix for trailing slash in urls (@ichinco), formatting cleanup
