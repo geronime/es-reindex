@@ -113,7 +113,7 @@ unless retried_request(:get, "#{durl}/#{didx}/_status")
     exit 1
   end
   mappings = Oj.load mappings
-  mappings[sidx].each_pair{|type, mapping|
+  mappings[sidx]['mappings'].each_pair{|type, mapping|
     printf 'Copying mapping \'%s/%s/%s\'... ', durl, didx, type
     unless retried_request(:put, "#{durl}/#{didx}/#{type}/_mapping",
         Oj.dump({type => mapping}))
