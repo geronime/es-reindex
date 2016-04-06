@@ -88,7 +88,7 @@ end
 
 # remove old index in case of remove=true
 retried_request(:delete, "#{durl}/#{didx}") \
-  if remove && retried_request(:get, "#{durl}/#{didx}/recovery")
+  if remove && retried_request(:get, "#{durl}/#{didx}/_recovery")
 
 # (re)create destination index
 unless retried_request(:get, "#{durl}/#{didx}/_recovery")
