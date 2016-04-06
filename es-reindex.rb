@@ -88,10 +88,10 @@ end
 
 # remove old index in case of remove=true
 retried_request(:delete, "#{durl}/#{didx}") \
-  if remove && retried_request(:get, "#{durl}/#{didx}/_status")
+  if remove && retried_request(:get, "#{durl}/#{didx}/recovery")
 
 # (re)create destination index
-unless retried_request(:get, "#{durl}/#{didx}/_status")
+unless retried_request(:get, "#{durl}/#{didx}/_recovery")
   # obtain the original index settings first
   unless settings = retried_request(:get, "#{surl}/#{sidx}/_settings")
     warn "Failed to obtain original index '#{surl}/#{sidx}' settings!"
