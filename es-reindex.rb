@@ -131,7 +131,7 @@ t, done = Time.now, 0
 shards = retried_request :get, "#{surl}/#{sidx}/_count?q=*"
 shards = Oj.load(shards)['_shards']['total'].to_i
 scan = retried_request(:get, "#{surl}/#{sidx}/_search" +
-    "?search_type=scan&scroll=10m&size=#{frame / shards}")
+    "?sort=_doc&scroll=10m&size=#{frame / shards}")
 scan = Oj.load scan
 scroll_id = scan['_scroll_id']
 total = scan['hits']['total']
