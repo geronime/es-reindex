@@ -87,6 +87,30 @@ def retried_request method, url, data=nil
   end
 end
 
+# since scroll API differs in different ES versions
+# here is different scroll according to version
+def scroll_request(url, scroll_id, es_version='1.5')
+  if ( es_version.split('.') <=> ['5'] ) >= 0
+    payload = Oj.dump({ scroll_id: scroll_id})
+  else
+    payload = scroll_id
+  end
+  while true
+    begin
+      data = RestClient::Request.execute(
+        method: :get,
+        url: url,
+        payload: payload)
+      return data
+    rescue RestClient::ResourceNotFound # no point to retry
+      return nil
+    rescue => e
+      warn "\nRetrying scroll #{url} scroll_id #{scroll_id} ERROR: #{e.class} - #{e.message}"
+      warn e.response
+    end
+  end
+end
+
 # remove old index in case of remove=true
 retried_request(:delete, "#{durl}/#{didx}") \
   if remove && retried_request(:get, "#{durl}/#{didx}/_recovery")
@@ -130,8 +154,23 @@ printf "Copying '%s/%s' to '%s/%s'... \n", surl, sidx, durl, didx
 t, done = Time.now, 0
 shards = retried_request :get, "#{surl}/#{sidx}/_count?q=*"
 shards = Oj.load(shards)['_shards']['total'].to_i
-scan = retried_request(:get, "#{surl}/#{sidx}/_search" +
+
+# we need to know ES version to be able to make correct search
+# search_type=scan was replaced with sort=_doc for ES > 5.0
+# it was deprecated starting from ES 2.1
+# (https://www.elastic.co/guide/en/elasticsearch/reference/2.4/search-request-search-type.html#scan)
+es_version = retried_request :get, "#{surl}"
+es_version = Oj.load(es_version)['version']['number']
+
+if ( es_version.split('.') <=> ['5'] ) >= 0
+  printf "Source ElasticSearch has version %s. Using sort=_doc\n", es_version
+  scan = retried_request(:get, "#{surl}/#{sidx}/_search" +
     "?sort=_doc&scroll=10m&size=#{frame / shards}")
+else
+  printf "Source ElasticSearch has version %s. Using search_type=scan\n", es_version
+  scan = retried_request(:get, "#{surl}/#{sidx}/_search" +
+    "?search_type=scan&scroll=10m&size=#{frame / shards}")
+end
 scan = Oj.load scan
 scroll_id = scan['_scroll_id']
 total = scan['hits']['total']
@@ -139,32 +178,34 @@ printf "    %u/%u (%.1f%%) done.\r", done, total, 0
 
 bulk_op = update ? 'index' : 'create'
 
+data = scan
 while true do
-  data = retried_request(:get,
-      "#{surl}/_search/scroll?scroll=10m&scroll_id=#{scroll_id}")
+  unless data['hits']['hits'].empty?
+    # this is when ElasticSearch uses sort=_doc
+    # first request already returns data
+    bulk = ''
+    data['hits']['hits'].each do |doc|
+      ### === implement possible modifications to the document
+      ### === end modifications to the document
+      base = {'_index' => didx, '_id' => doc['_id'], '_type' => doc['_type']}
+      ['_timestamp', '_ttl'].each{|doc_arg|
+        base[doc_arg] = doc[doc_arg] if doc.key? doc_arg
+      }
+      bulk << Oj.dump({bulk_op => base}) + "\n"
+      bulk << Oj.dump(doc['_source']) + "\n"
+      done += 1
+    end
+    bulk << "\n" # empty line in the end required
+    retried_request :post, "#{durl}/_bulk", bulk
+
+    eta = total * (Time.now - t) / done
+    printf "    %u/%u (%.1f%%) done in %s, E.T.A.: %s.\r",
+    done, total, 100.0 * done / total, tm_len(Time.now - t), t + eta
+  end
+  data = scroll_request("#{surl}/_search/scroll?scroll=10m", scroll_id, es_version)
   data = Oj.load data
   break if data['hits']['hits'].empty?
   scroll_id = data['_scroll_id']
-  bulk = ''
-  data['hits']['hits'].each do |doc|
-    ### === implement possible modifications to the document
-    ### === end modifications to the document
-    base = {'_index' => didx, '_id' => doc['_id'], '_type' => doc['_type']}
-    ['_timestamp', '_ttl'].each{|doc_arg|
-      base[doc_arg] = doc[doc_arg] if doc.key? doc_arg
-    }
-    bulk << Oj.dump({bulk_op => base}) + "\n"
-    bulk << Oj.dump(doc['_source']) + "\n"
-    done += 1
-  end
-  unless bulk.empty?
-    bulk << "\n" # empty line in the end required
-    retried_request :post, "#{durl}/_bulk", bulk
-  end
-
-  eta = total * (Time.now - t) / done
-  printf "    %u/%u (%.1f%%) done in %s, E.T.A.: %s.\r",
-    done, total, 100.0 * done / total, tm_len(Time.now - t), t + eta
 end
 
 printf "#{' ' * 80}\r    %u/%u done in %s.\n",
@@ -190,4 +231,3 @@ printf "%u == %u (%s\n",
   scount, dcount, scount == dcount ? 'equals).' : 'NOT EQUAL)!'
 
 exit 0
-
